@@ -1,0 +1,11 @@
+# GoLand IDE
+.idea
+
+# Go files for development / debugging.
+go.sum
+go.work
+go.work.sum
+*.test
+
+# VSCode files
+.Trash*
