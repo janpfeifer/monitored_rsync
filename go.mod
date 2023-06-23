@@ -1,4 +1,4 @@
-module monitored_rsync
+module github.com/janpfeifer/monitored_rsync
 
 go 1.20
 
