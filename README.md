@@ -16,7 +16,9 @@ develop, specially for IDEs that are constantly checking if files changed).
 $ go install github.com/janpfeifer/monitored_rsync@latest
 ```
 
-Example:
+Note: prefix with `GOPROXY=direct` if you want to make sure it is getting the latest version.
+
+## Example:
 
 ```bash
 $ monitored_rsync --exclude=.git,.idea ~/Projects/MyProject me@myhost:Projects/MyProject
@@ -24,10 +26,32 @@ $ monitored_rsync --exclude=.git,.idea ~/Projects/MyProject me@myhost:Projects/M
 
 ## More options
 
-See --help for several options.
+From --help:
+
+```text
+Usage of monitored_rsync:
+$ monitored_rsync [flags...] <source_directory> <remote_target>
+                                           
+  It monitors changes in directories using inotifywait, and when changes happen, it invokes rsync.                                              
+                                           
+  <source_directory>: where to monitor and rsync from.    
+  <remove_target>: passed to rsync
+                                                                                                                                                                              
+  Use '--vmodule=rsync=2' to see the rsync command executed. And use '--vmodule=monitor=2' to see file change
+  events received.                                                                                                                                                            
+                                           
+  -delay int
+        Time in milliseconds to wait for changes, before invoking rsync. This is usually efficient because changes to files usually happen in burst, and we want to avoid mult
+iple rsync invocations. (default 1000)
+  -dry-run
+        If set to true, it will run rsync in dry-run mode.
+  -exclude string
+        List (comma-separated) of subdirectories (from the source directory) to exclude from monitoring and rsync.
+```
+_(Various logging flags omitted)_
 
 ## TODO
 
-RSync flags are hard-coded for now :( -- except the `--exclude` and `--dry-run`. 
+The `rsync` flags are hard-coded for now :( -- except the `--exclude` and `--dry-run`. 
 Someone should create a flag to make it configurable.
 
