@@ -12,8 +12,11 @@ develop, specially for IDEs that are constantly checking if files changed).
 
 ## Installation
 
+Notice we use `main` and not `latest`, because of the annoying caching of `go install`. Using the branch `main`
+will always get the latest version.
+
 ```bash
-$ go install github.com/janpfeifer/monitored_rsync@latest
+$ go install github.com/janpfeifer/monitored_rsync@main
 ```
 
 Example:
