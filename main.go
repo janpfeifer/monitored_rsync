@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/janpfeifer/must"
 	klog "k8s.io/klog/v2"
 )
 
@@ -25,11 +27,6 @@ func AssertNoError(err error) {
 	if err != nil {
 		log.Fatalf("Failed: %+v", err)
 	}
-}
-
-func MustNoError[T any](value T, err error) T {
-	AssertNoError(err)
-	return value
 }
 
 // ReplaceTildeInDir by the user's home directory. Returns dir if it doesn't start with "~".
@@ -48,7 +45,7 @@ func AbsoluteSourceDirectory(srcDir string) string {
 		if strings.HasPrefix(srcDir, "./") {
 			srcDir = srcDir[2:]
 		}
-		pwd := MustNoError(os.Getwd())
+		pwd := must.M1(os.Getwd())
 		if srcDir == "." {
 			srcDir = pwd
 		} else {
@@ -57,6 +54,17 @@ func AbsoluteSourceDirectory(srcDir string) string {
 	}
 	return srcDir
 }
+
+var (
+	style = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#7D56F4")).
+		PaddingTop(1).
+		PaddingBottom(1).
+		PaddingLeft(4).
+		PaddingRight(4)
+)
 
 func main() {
 	klog.InitFlags(nil)
@@ -90,13 +98,25 @@ func main() {
 	}
 
 	// Verbose.
-	fmt.Printf("Source directory:\t%s\n", sourceDirectory)
-	fmt.Printf("Remote directory:\t%s\n", remoteDirectory)
-	if len(excludePaths) > 0 {
-		fmt.Printf("Exclude paths:   \t%v\n", excludePaths)
+	headerStyle := lipgloss.NewStyle().
+		PaddingRight(3).PaddingLeft(3).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("99")).
+		Bold(true)
+	parts := []string{
+		fmt.Sprintf("Source Directory: \t%s", sourceDirectory),
+		fmt.Sprintf("Remote Directory: \t%s", remoteDirectory),
 	}
+	if len(excludePaths) > 0 {
+		parts = append(parts, fmt.Sprintf("Exclude paths:"))
+		for _, p := range excludePaths {
+			parts = append(parts, fmt.Sprintf("\t%s", p))
+		}
+	}
+	fmt.Println(headerStyle.Render(strings.Join(parts, "\n")))
 
 	err := Monitor(sourceDirectory, excludePaths, time.Millisecond*time.Duration(*flagDelay), func() error {
+		fmt.Println(style.Render(fmt.Sprintf("rsync @ %s", time.Now())))
 		return RSync(sourceDirectory, remoteDirectory, excludePaths)
 	})
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/fsnotify/fsnotify"
+	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
 	"path"
@@ -9,21 +10,23 @@ import (
 	"time"
 )
 
+var empty = struct{}{}
+
 // RecursiveWatcher creates a new fsnotify Watcher for the specified path and its subdirectories.
-func RecursiveWatcher(watchPath string, excludedPaths []string) (*fsnotify.Watcher, error) {
+func RecursiveWatcher(watchPath string, excludedPaths []string) (*fsnotify.Watcher, Set[string], error) {
 	// Create excluded set from list.
-	excludedPathsSet := make(map[string]struct{})
+	excludedPathsSet := MakeSet[string](len(excludedPaths))
 	for _, exclude := range excludedPaths {
-		if exclude[0] != '/' {
+		if !path.IsAbs(exclude) {
 			exclude = path.Join(watchPath, exclude)
 		}
-		excludedPathsSet[exclude] = struct{}{}
+		excludedPathsSet.Insert(exclude)
 	}
 
 	// Create watcher.
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Recursively travel tree, and collect directories to watch.
@@ -33,7 +36,7 @@ func RecursiveWatcher(watchPath string, excludedPaths []string) (*fsnotify.Watch
 		}
 
 		// Skip excluded paths
-		if _, ok := excludedPathsSet[newPath]; ok {
+		if excludedPathsSet.Has(newPath) {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
@@ -50,15 +53,46 @@ func RecursiveWatcher(watchPath string, excludedPaths []string) (*fsnotify.Watch
 	})
 
 	if err != nil {
-		AssertNoError(watcher.Close())
-		return nil, err
+		must.M(watcher.Close())
+		return nil, nil, err
 	}
 
-	return watcher, nil
+	return watcher, excludedPathsSet, nil
 }
 
+// UpdateWatcher updates the watcher to new directories that may have been created.
+func UpdateWatcher(watcher *fsnotify.Watcher, excludeSet Set[string], ev fsnotify.Event) error {
+	if !ev.Has(fsnotify.Create) {
+		return nil
+	}
+	if excludeSet.Has(ev.Name) {
+		return nil
+	}
+	fi, err := os.Stat(ev.Name)
+	if err != nil {
+		// Non-fatal error.
+		klog.Errorf("Failed to Stat(%q): %+v", ev.Name, err)
+		return nil
+	}
+	if !fi.IsDir() {
+		return nil
+	}
+	err = watcher.Add(ev.Name)
+	if err != nil {
+		// Non-fatal error.
+		klog.Errorf("Failed to watcher.Add(%q): %+v", ev.Name, err)
+		return nil
+	}
+	return nil
+}
+
+// Monitor watches for change events on the sub-directories under srcDir, and call onChange if anything changes.
+//
+// Limitations: it doesn't monitor new directories that may be created.
+//
+// The excludePaths are not monitored.
 func Monitor(srcDir string, excludePaths []string, delay time.Duration, onChange func() error) error {
-	watcher := MustNoError(RecursiveWatcher(srcDir, excludePaths))
+	watcher, excludeSet := must.M2(RecursiveWatcher(srcDir, excludePaths))
 	var err error
 	for {
 		// Wait for anything to change.
@@ -66,6 +100,10 @@ func Monitor(srcDir string, excludePaths []string, delay time.Duration, onChange
 		case ev := <-watcher.Events:
 			klog.V(2).Infof("watcher: %s", ev)
 			// Something changed, start timer.
+			err = UpdateWatcher(watcher, excludeSet, ev)
+			if err != nil {
+				return err
+			}
 		case err = <-watcher.Errors:
 			return err
 		}
@@ -78,9 +116,15 @@ func Monitor(srcDir string, excludePaths []string, delay time.Duration, onChange
 				select {
 				case ev := <-watcher.Events:
 					klog.V(2).Infof("watcher (on timer): %s", ev)
-					// Nothing to do, timer already running.
+					err = UpdateWatcher(watcher, excludeSet, ev)
+					if err != nil {
+						return err
+					}
+					timer = time.NewTimer(delay) // Reset timer for more changes.
+
 				case err = <-watcher.Errors:
 					return err
+
 				case <-timer.C:
 					klog.V(2).Info("watcher: calling onChange")
 					break waitOnChange
@@ -95,39 +139,3 @@ func Monitor(srcDir string, excludePaths []string, delay time.Duration, onChange
 		}
 	}
 }
-
-//
-//func main() {
-//	excludedPaths := make(map[string]struct{})
-//	excludedPaths["./exclude-dir"] = struct{}{}
-//
-//	watcher, err := RecursiveWatcher(".", excludedPaths)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//
-//	defer watcher.Close()
-//
-//	done := make(chan bool)
-//	go func() {
-//		for {
-//			select {
-//			case event, ok := <-watcher.Events:
-//				if !ok {
-//					return
-//				}
-//				log.Println("event:", event)
-//				if event.Op&fsnotify.Write == fsnotify.Write {
-//					log.Println("modified file:", event.Name)
-//				}
-//			case err, ok := <-watcher.Errors:
-//				if !ok {
-//					return
-//				}
-//				log.Println("error:", err)
-//			}
-//		}
-//	}()
-//
-//	<-done
-//}
