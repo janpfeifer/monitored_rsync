@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,6 +96,7 @@ func main() {
 	var excludePaths []string
 	if *flagExclude != "" {
 		excludePaths = strings.Split(*flagExclude, ",")
+		excludePaths = slices.DeleteFunc(excludePaths, func(s string) bool { return s == "" })
 	}
 
 	// Verbose.

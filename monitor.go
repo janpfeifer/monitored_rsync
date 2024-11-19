@@ -37,6 +37,9 @@ func RecursiveWatcher(watchPath string, excludedPaths []string) (*fsnotify.Watch
 
 		// Skip excluded paths
 		if excludedPathsSet.Has(newPath) {
+			if klog.V(2).Enabled() {
+				klog.Infof("Skipping excluded path %q", newPath)
+			}
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
@@ -45,6 +48,7 @@ func RecursiveWatcher(watchPath string, excludedPaths []string) (*fsnotify.Watch
 
 		if info.IsDir() {
 			err = watcher.Add(newPath)
+			klog.V(2).Infof("watcher.Add(%q)", newPath)
 			if err != nil {
 				return err
 			}
